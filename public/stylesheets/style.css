@@ -10,4 +10,6 @@ a {
 
 #drawing-area {
 	border: 2px solid #ccc;
+	width: 1065px;
+	height: 519px;
 }
