@@ -9,15 +9,26 @@ RR.Globals = {
 	CANVAS_MIN_Y_BOUND: 0,
 	SMALLEST_CIRCLE_RADIUS: 5,
 	LARGEST_CIRCLE_RADIUS: 20,
-	DEFAULT_FILL_COLOURS: ['#FFA3EF','#627BE8','#A2FFD4','#E7E888','#FFAE5B'],
-	DEFAULT_STROKE_COLOUR: '#ccc',
-	DEFAULT_STROKE_WIDTH: 2,
+	FILL_COLOURS: ['#FFA3EF','#627BE8','#A2FFD4','#E7E888','#FFAE5B'],
+	STROKE_COLOUR: '#ccc',
+	STROKE_WIDTH: 2,
 	ANIMATION_INTERVAL_MS: 10,
 	MIN_X_SPEED: -5,
 	MIN_Y_SPEED: -5,
 	MAX_X_SPEED: 5,
 	MAX_Y_SPEED: 5,
-	COLLISION_SOUNDS: ['/sounds/beep.mp3', '/sounds/beep2.mp3', '/sounds/beep3.mp3']
+	SMALL_COLLISION_SOUND: '/sounds/small.mp3',
+	MEDIUM_COLLISION_SOUND: '/sounds/medium.mp3',
+	LARGE_COLLISION_SOUND: '/sounds/large.mp3',
+	ATTR_STROKE: 'stroke',
+	ATTR_STROKE_WIDTH: 'stroke-width',
+	ATTR_FILL: 'fill',
+	ATTR_X: 'cx',
+	ATTR_Y: 'cy',
+	ATTR_RADIUS: 'r',
+	DATA_X_SPEED: 'xSpeed',
+	DATA_Y_SPEED: 'ySpeed',
+	DATA_SOUND: 'sound'
 };
 
 // Helper functions
@@ -45,15 +56,15 @@ RR.Drawing = function(canvasId) {
 			return canvas.circle(x, y, radius);
 		},
 		fillShape: function(shape, fillColour) {
-			shape.attr('fill', fillColour);
+			shape.attr(RR.Globals.ATTR_FILL, fillColour);
 		},
 		strokeShape: function(shape, strokeColour, strokeWidth) {
-			shape.attr('stroke', strokeColour);
-			shape.attr('stroke-width', strokeWidth);
+			shape.attr(RR.Globals.ATTR_STROKE, strokeColour);
+			shape.attr(RR.Globals.ATTR_STROKE_WIDTH, strokeWidth);
 		},
 		drawShape: function(shape, x, y) {
-			shape.attr('cx', x);
-			shape.attr('cy', y);
+			shape.attr(RR.Globals.ATTR_X, x);
+			shape.attr(RR.Globals.ATTR_Y, y);
 		}
 	};
 };
@@ -63,7 +74,7 @@ RR.AudioPlayer = function() {
 
 	var _audioFiles = {};
 
-	function loadAudioFile(index, audioFilePath) {
+	function loadAudio(index, audioFilePath) {
 
 		var audio = _audioFiles[index];
 
@@ -73,6 +84,10 @@ RR.AudioPlayer = function() {
 			_audioFiles[index] = audio;
 		}
 		
+		return audio;
+	}
+
+	function playAudio(audio) {
 		if (!audio.paused) {
 			audio.pause();
 			audio.currentTime = 0;
@@ -83,16 +98,43 @@ RR.AudioPlayer = function() {
 
 	return {
 		playSound: function(index, audioFilePath) {
-			loadAudioFile(index, audioFilePath);
+			var audio = loadAudio(index, audioFilePath);
+			playAudio(audio);
 		}
 	};
 };
+
+// Collision functions
+RR.Collision = function() {
+	return {
+		detectXCanvasCollision: function(x, radius) {
+			if (x+radius >= RR.Globals.CANVAS_WIDTH)
+				x = RR.Globals.CANVAS_WIDTH - radius;
+			
+			if (x-radius <= RR.Globals.CANVAS_MIN_X_BOUND)
+				x = radius;
+	
+			return x;
+		},
+		detectYCanvasCollision: function(y, radius) {
+			if (y+radius >= RR.Globals.CANVAS_HEIGHT)
+				y = RR.Globals.CANVAS_HEIGHT - radius;
+			
+			if (y-radius <= RR.Globals.CANVAS_MIN_Y_BOUND)
+				y = radius;
+	
+			return y;
+		}
+	};
+};
+
 
 // Main program
 RR.Program = function() {
 
 	var _drawing;
 	var _audioPlayer;
+	var _collision;
 	var _canvas;
 	var _players = {};
 
@@ -100,7 +142,18 @@ RR.Program = function() {
 		_drawing = new RR.Drawing(RR.Globals.CANVAS_ID);
 		_canvas = _drawing.initCanvas(RR.Globals.CANVAS_WIDTH, RR.Globals.CANVAS_HEIGHT);
 		_audioPlayer = new RR.AudioPlayer();
+		_collision = new RR.Collision();
 	}
+
+	function getPlayerSound(radius) {
+		if (radius < 10)
+				return RR.Globals.SMALL_COLLISION_SOUND;
+		if (radius >= 10 && radius < 15)
+				return RR.Globals.MEDIUM_COLLISION_SOUND;
+		
+		return RR.Globals.LARGE_COLLISION_SOUND;
+	}
+
 
 	function addPlayer() {
 		if (_canvas) {
@@ -110,53 +163,41 @@ RR.Program = function() {
 			var y = RR.Helpers.getRandomNumber(1, RR.Globals.CANVAS_HEIGHT);
 			var xSpeed = RR.Helpers.getRandomNumber(RR.Globals.MIN_X_SPEED, RR.Globals.MAX_X_SPEED);
 			var ySpeed = RR.Helpers.getRandomNumber(RR.Globals.MIN_Y_SPEED, RR.Globals.MAX_Y_SPEED);
+			var radius = RR.Helpers.getRandomNumber(RR.Globals.SMALLEST_CIRCLE_RADIUS, RR.Globals.LARGEST_CIRCLE_RADIUS);
+			var colour = RR.Globals.FILL_COLOURS[RR.Helpers.getRandomNumber(0, RR.Globals.FILL_COLOURS.length-1)];
+			var sound = getPlayerSound(radius);
 
 			if (!xSpeed && !ySpeed) {
 				xSpeed = RR.Globals.MAX_X_SPEED;
-				ySpeed = RR.Helpers.getRandomNumber(RR.Globals.MIN_Y_SPEED, RR.Globals.MAX_Y_SPEED);;
+				ySpeed = RR.Helpers.getRandomNumber(RR.Globals.MIN_Y_SPEED, RR.Globals.MAX_Y_SPEED);
 			}
 
+			x = _collision.detectXCanvasCollision(x, radius);
+			y = _collision.detectYCanvasCollision(y, radius);
 
-			var radius = RR.Helpers.getRandomNumber(RR.Globals.SMALLEST_CIRCLE_RADIUS, RR.Globals.LARGEST_CIRCLE_RADIUS);
-			var colour = RR.Globals.DEFAULT_FILL_COLOURS[RR.Helpers.getRandomNumber(0, RR.Globals.DEFAULT_FILL_COLOURS.length-1)];
-			var sound = RR.Helpers.getRandomNumber(0, RR.Globals.COLLISION_SOUNDS.length-1);
+			var player = _drawing.createCircle(_canvas, x, y, radius);
 
-			if (x+radius >= RR.Globals.CANVAS_WIDTH)
-				x = RR.Globals.CANVAS_WIDTH - radius;
-		
-			if (y+radius >= RR.Globals.CANVAS_HEIGHT)
-				y = RR.Globals.CANVAS_HEIGHT - radius;
-		
-			if (x-radius <= RR.Globals.CANVAS_MIN_X_BOUND)
-				x = radius;
-		
-			if (y-radius <= RR.Globals.CANVAS_MIN_Y_BOUND)
-				y = radius;
-		
-			var circle = _drawing.createCircle(_canvas, x, y, radius);
+			player.data(RR.Globals.DATA_X_SPEED, xSpeed);
+			player.data(RR.Globals.DATA_Y_SPEED, ySpeed);
+			player.data(RR.Globals.DATA_SOUND, sound);
 
-			circle.data('xSpeed', xSpeed);
-			circle.data('ySpeed', ySpeed);
-			circle.data('sound', sound);
+			_drawing.fillShape(player, colour);
+			_drawing.strokeShape(player, RR.Globals.STROKE_COLOUR, RR.Globals.STROKE_WIDTH);
 
-			_drawing.fillShape(circle, colour);
-			_drawing.strokeShape(circle, RR.Globals.DEFAULT_STROKE_COLOUR, RR.Globals.DEFAULT_STROKE_WIDTH);
-
-			return circle;
+			return player;
 		}
 	}
 
 	function animatePlayer(player) {
 
-		var radius = player.attr('r');
-		var x = player.attr('cx');
-		var y = player.attr('cy');
+		var radius = player.attr(RR.Globals.ATTR_RADIUS);
+		var x = player.attr(RR.Globals.ATTR_X);
+		var y = player.attr(RR.Globals.ATTR_Y);
 		var xBound = x;
 		var yBound = y;
-		var xSpeed = player.data('xSpeed');
-		var ySpeed = player.data('ySpeed');
-		var soundIndex = player.data('sound');
-		var sound = RR.Globals.COLLISION_SOUNDS[soundIndex];
+		var xSpeed = player.data(RR.Globals.DATA_X_SPEED);
+		var ySpeed = player.data(RR.Globals.DATA_Y_SPEED);
+		var sound = player.data(RR.Globals.DATA_SOUND);
 
 		if (xSpeed < 0)
 			xBound -= radius;
@@ -185,20 +226,20 @@ RR.Program = function() {
 
 		_drawing.drawShape(player, x, y);
 
-		player.data('xSpeed', xSpeed);
-		player.data('ySpeed', ySpeed);
+		player.data(RR.Globals.DATA_X_SPEED, xSpeed);
+		player.data(RR.Globals.DATA_Y_SPEED, ySpeed);
 	}
 
 	init();
 
-	for (var i = 0; i < 20; i++) {
+	for (var i = 0; i < 100; i++) {
 		_players[i] = addPlayer();
 	};
 
 	setInterval(
 		function() { 
 			
-			for (var i = 0; i < 20; i++) {
+			for (var i = 0; i < 100; i++) {
 				var player = _players[i];
 				if (player)
 					animatePlayer(player); 
